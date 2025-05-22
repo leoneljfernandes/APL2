@@ -37,7 +37,27 @@ void lanzar_demonio(){
     }
 }
 
-int main(){
+void mostrarAyuda() {
+    cout << "Uso: ./ejercicio1.cpp [OPCIONES]" << endl;
+    cout << "Opciones:" << endl;
+    cout << "  -h          Muestra este mensaje de ayuda" << endl;
+    cout << endl;
+    cout << "Descripción:" << endl;
+    cout << "  Este programa crea procesos hijos, nietos y un demonio." << endl;
+    cout << "  El nieto 2 se deja como zombie intencionalmente para demostración." << endl;
+    cout << endl;
+    cout << "Ejemplos:" << endl;
+    cout << "  ./programa       # Ejecución normal" << endl;
+    cout << "  ./programa -h    # Muestra ayuda" << endl;
+}
+
+int main(int argc, char *argv[]){
+
+    // verificar parametro -h
+    if (argc > 1 && strcmp(argv[1], "-h") == 0){
+        mostrarAyuda();
+        return 0;
+    }
     cout << "Iniciando proceso padre (PID: " << getpid() << ")" << endl;
     pid_t pidHijo1, pidHijo2;
 
@@ -95,7 +115,7 @@ int main(){
 
         cout << "Hijo1 (PID: " << getpid() << ") esperando 30 segundos (nieto2 será zombie)." << endl;
         sleep(30);
-        
+
         _exit(0);
     }
     // Hijo 2
@@ -119,6 +139,11 @@ int main(){
 
     cout << "Padre: Todos los hijos terminaron." << endl;
     cout << "Mis hijos fueron: " << pidHijo1 << " y " << pidHijo2 << endl;
+
+    // Implementacion de espera a pulsar una tecla antes de finalizar
+    cout << "Presiona Enter para finalizar el programa..." << endl;
+    cin.ignore();  // Espera a que el usuario presione Enter
+    cout << "Finalizando proceso padre." << endl;
 
     return 0;  // El padre termina normalmente
 }

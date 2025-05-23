@@ -4,6 +4,11 @@
 #include <filesystem> // Para verificar el directorio (C++17)
 #include <climits>
 #include <cstdlib> // para strtol
+#include <mutex>
+#include <thread>
+#include <vector>
+#include <fstream>
+#include <condition_variable>
 
 namespace fs = std::filesystem;
 using namespace std;
@@ -94,8 +99,144 @@ void mostrarAyuda() {
     cout << "  ./programa -h    # Muestra ayuda" << endl;
 }
 
+void limpiarContenidoDirectorio(const string& directorio) {
+    try {
+        if (fs::exists(directorio) && fs::is_directory(directorio)) {
+            for (const auto& entry : fs::directory_iterator(directorio)) {
+                fs::remove_all(entry.path());
+            }
+        }
+    } catch (const fs::filesystem_error& e) {
+        cout << "Error al limpiar el directorio: " << e.what() << endl;
+    }
+}
+
+struct datosCompartidos {
+    mutex mtx;
+    condition_variable cv_producido;  // Notifica cuando se produce un elemento
+    condition_variable cv_consumido;  // Notifica cuando se consume un elemento
+    vector<string> buffer;
+    int maxBufferSize = 10;
+    int nextId = 1;
+    int cantMaxPaquetes = 0;
+    int cantPaquetesGenerados = 0;
+    int cantPaquetesProcesados = 0;
+    bool fin = false;
+};
+
+void generarPaquetes(string subDirectorio, datosCompartidos& datos, int maxPaquetesAGenerar){
+
+    while(true){
+        //pido mutex
+        unique_lock<mutex> lock(datos.mtx);
+
+        // esperar si el buffer esta lleno
+        datos.cv_producido.wait(lock, [&datos] { 
+            return datos.buffer.size() < datos.maxBufferSize || datos.fin; });
+
+
+        // si ya se generaron los paquetes a generar o se alcanzo el maximo, salgo
+        if(datos.cantPaquetesGenerados == datos.cantMaxPaquetes || datos.cantPaquetesGenerados == maxPaquetesAGenerar){
+            datos.fin = true;
+            datos.cv_producido.notify_all(); // notificar a los consumidores
+            return;
+        }
+        
+        // genero paquete
+        string nombreArchivo = to_string(datos.nextId) + ".paq";
+
+        double peso = (rand() % 300) + 1; // peso entre 1 y 300
+        int destino = (rand() % 50) + 1; // destino entre 1 y 50   
+        string contenido = to_string(datos.nextId) + ";" + to_string(peso) + ";" + to_string(destino);
+        
+        // creo el archivo
+        try{
+            ofstream archivo(subDirectorio + "/" + nombreArchivo);
+            if (archivo.is_open()) {
+                archivo << contenido;
+                archivo.close();
+                cout << "Generador: " << nombreArchivo << " creado." << endl;
+            } else {
+                cout << "Error al crear el archivo: " << nombreArchivo << endl;
+            }
+        } catch (const fs::filesystem_error& e) {
+            cout << "Error al crear el archivo: " << e.what() << endl;
+        }
+
+        // actualizo el buffer
+        datos.buffer.push_back(nombreArchivo);
+        datos.nextId++;
+        datos.cantPaquetesGenerados++;
+
+        lock.unlock(); //libero el mutex
+        this_thread::sleep_for(std::chrono::milliseconds(100)); //simulo tiempo de generacion
+        
+        cout << "Generador: " << nombreArchivo << " generado." << endl;
+        cout << "Cantidad de paquetes generados: " << datos.cantPaquetesGenerados << endl;
+
+    }
+}
+
+void procesarPaquetes(string directorioProcesamiento, string subDirectorioProcesamiento,datosCompartidos& datos, int maxPaquetesAProcesar){
+    while(true){
+        //pido mutex
+        unique_lock<mutex> lock(datos.mtx);
+
+        //espero si el buffet esta vacio
+        datos.cv_producido.wait(lock, [&datos]{
+            return !datos.buffer.empty() || datos.fin; });
+        
+        if(datos.buffer.empty() && datos.fin){
+                return;
+        }
+        if(datos.buffer.empty() ){
+            continue;
+        }
+
+        // obtengo archivos a procesar
+        string nombreArchivo = datos.buffer.back();
+        datos.buffer.pop_back();
+        datos.cantPaquetesProcesados++;
+
+        //notifico al productor que hay espacio en buffer
+        datos.cv_consumido.notify_one();
+
+        //libero mutex
+        lock.unlock();
+
+        //proceso archivo
+        try{
+            //muevo el archivo del subdirec a procesados
+            std::filesystem::path origen = directorioProcesamiento + "/" + nombreArchivo;
+            std::filesystem::path destino = subDirectorioProcesamiento + "/" + nombreArchivo;
+
+            // Procesar peso por cada sucursal destino
+
+
+            ///////////
+
+            if(fs::exists(origen)){
+                fs::rename(origen, destino);
+                cout << "Consumidor: " << nombreArchivo << " procesado." << endl;
+            } else {
+                cout << "Error al procesar el archivo: " << nombreArchivo << endl;
+            }
+        }catch(const exception& e){
+            cout << "Error al procesar el archivo: " << e.what() << endl;
+        }
+
+        //simulo proc
+        this_thread::sleep_for(std::chrono::milliseconds(100)); //simulo tiempo de procesamiento
+    }
+}
 
 int main(int argc, char *argv[]){
+
+    // creo el subDirectorio de procesamiento como nulo
+    string directorioProcesamiento = "";
+    int cantGeneradores = 0;
+    int cantConsumidores = 0;
+    int cantPaquetes = 0;
 
     // verificar parametro -h
     if (argc > 1 && strcmp(argv[1], "-h") == 0){
@@ -107,6 +248,52 @@ int main(int argc, char *argv[]){
         cout << "Error: Parámetros inválidos." << endl;
         mostrarAyuda();
         return 1;
+    }
+
+    // ./ejercicio2 -d ./archivos/ -g 2 -c 2 -p 10
+    // .. 0         1   2           3 4 5 6  7  8
+    // asigno el directorio y le concateno al subdirectorio el nombre del directorio de procesamiento
+    directorioProcesamiento = argv[2];
+    string subDirectorioProcesamiento = directorioProcesamiento + "/procesados";
+    // Crear directorios si no existen
+    if(!fs::exists(directorioProcesamiento)) {
+        fs::create_directory(directorioProcesamiento);
+    }
+    if(!fs::exists(subDirectorioProcesamiento)) {
+        fs::create_directory(subDirectorioProcesamiento);
+    }
+    cantGeneradores = atoi(argv[4]);
+    cantConsumidores = atoi(argv[6]);
+    cantPaquetes = atoi(argv[8]);
+
+    // limpiar directorio de procesamiento
+    limpiarContenidoDirectorio(directorioProcesamiento);
+    limpiarContenidoDirectorio(subDirectorioProcesamiento);
+
+    // generar hilo productor que generara el archivo paquete para depositar en buffer
+    // Genero vector de hilos generadores
+    datosCompartidos datosCompartidos;
+    datosCompartidos.cantMaxPaquetes = cantPaquetes;
+    vector<thread> generadores;
+    for(int i = 0; i < cantGeneradores; i++){
+        generadores.push_back(thread(generarPaquetes, directorioProcesamiento, datosCompartidos, 1000));
+    }
+
+
+    // generar hilo consumidor que procesara y consumira el paquete del buffer
+    vector<thread> consumidores;
+    for(int i = 0; i< cantConsumidores; i++){
+        consumidores.emplace_back(procesarPaquetes, directorioProcesamiento, subDirectorioProcesamiento, ref(datosCompartidos), 1000);
+    }
+
+        // Esperar a que terminen los generadores
+    for(auto& t : generadores) {
+        t.join();
+    }
+
+    // Esperar a que terminen los consumidores
+    for(auto& t : consumidores) {
+        t.join();
     }
 
     return 0;

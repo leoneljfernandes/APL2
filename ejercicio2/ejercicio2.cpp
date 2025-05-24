@@ -116,6 +116,8 @@ struct datosCompartidos {
     condition_variable cv_producido;  // Notifica cuando se produce un elemento
     condition_variable cv_consumido;  // Notifica cuando se consume un elemento
     vector<string> buffer;
+    // vector de 1 a 50 por sucursal para guardar el peso
+    vector<double> pesosPorSucursal = vector<double>(50, 0);
     int maxBufferSize = 10;
     int nextId = 1;
     int cantMaxPaquetes = 0;
@@ -165,6 +167,7 @@ void generarPaquetes(string subDirectorio, datosCompartidos& datos, int maxPaque
 
         // actualizo el buffer
         datos.buffer.push_back(nombreArchivo);
+        datos.cv_producido.notify_one(); // notificar a los consumidores
         datos.nextId++;
         datos.cantPaquetesGenerados++;
 
@@ -182,16 +185,16 @@ void procesarPaquetes(string directorioProcesamiento, string subDirectorioProces
         //pido mutex
         unique_lock<mutex> lock(datos.mtx);
 
-        //espero si el buffet esta vacio
-        datos.cv_producido.wait(lock, [&datos]{
-            return !datos.buffer.empty() || datos.fin; });
-        
         if(datos.buffer.empty() && datos.fin){
                 return;
         }
         if(datos.buffer.empty() ){
             continue;
         }
+
+        //espero si el buffet esta vacio
+        datos.cv_producido.wait(lock, [&datos]{
+            return !datos.buffer.empty() || datos.fin; });   
 
         // obtengo archivos a procesar
         string nombreArchivo = datos.buffer.back();
@@ -211,9 +214,33 @@ void procesarPaquetes(string directorioProcesamiento, string subDirectorioProces
             std::filesystem::path destino = subDirectorioProcesamiento + "/" + nombreArchivo;
 
             // Procesar peso por cada sucursal destino
+            try{
+                ifstream archivo(origen);
+                if (archivo.is_open()) {
+                    string linea;
+                    while (getline(archivo, linea)) {
+                        size_t pos1 = linea.find(';');
+                        size_t pos2 = linea.find(';', pos1 + 1);
+                        if (pos1 != string::npos && pos2 != string::npos) {
+                            int destinoSucursal = stoi(linea.substr(pos2 + 1));
+                            double peso = stod(linea.substr(pos1 + 1, pos2 - pos1 - 1));
+                            datos.pesosPorSucursal[destinoSucursal - 1] += peso; // Acumular peso por sucursal
+                        }
+                    }
+                    archivo.close();
+                } else {
+                    cout << "Error al abrir el archivo: " << origen << endl;
+                }
 
+                // Mostrar pesos por sucursal
+                cout << "Pesos por sucursal:" << endl;
+                for (size_t i = 0; i < datos.pesosPorSucursal.size(); ++i) {
+                    cout << "Sucursal " << (i + 1) << ": " << datos.pesosPorSucursal[i] << " kg" << endl;
+                }
 
-            ///////////
+            }catch(const exception& e){
+                cout << "Error al procesar el archivo: " << e.what() << endl;
+            }
 
             if(fs::exists(origen)){
                 fs::rename(origen, destino);
@@ -276,7 +303,7 @@ int main(int argc, char *argv[]){
     datosCompartidos.cantMaxPaquetes = cantPaquetes;
     vector<thread> generadores;
     for(int i = 0; i < cantGeneradores; i++){
-        generadores.push_back(thread(generarPaquetes, directorioProcesamiento, datosCompartidos, 1000));
+        generadores.push_back(thread(generarPaquetes, directorioProcesamiento, ref(datosCompartidos), 1000));
     }
 
 
@@ -294,6 +321,14 @@ int main(int argc, char *argv[]){
     // Esperar a que terminen los consumidores
     for(auto& t : consumidores) {
         t.join();
+    }
+
+    cout << "Proceso completado." << endl;
+    cout << "Cantidad total de paquetes generados: " << datosCompartidos.cantPaquetesGenerados << endl;
+    cout << "Cantidad total de paquetes procesados: " << datosCompartidos.cantPaquetesProcesados << endl;
+    cout << "Pesos por sucursal:" << endl;
+    for (size_t i = 0; i < datosCompartidos.pesosPorSucursal.size(); ++i) {
+        cout << "Sucursal " << (i + 1) << ": " << datosCompartidos.pesosPorSucursal[i] << " kg" << endl;
     }
 
     return 0;

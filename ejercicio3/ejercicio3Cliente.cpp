@@ -84,8 +84,8 @@ void verificarParametros(int argc, char *argv[]) {
     }
 }
 
-int main(int argc, char *argv[]) {
 
+int main(int argc, char *argv[]) {
     if (argc > 1 && strcmp(argv[1], "-h") == 0) {
         mostrarAyuda();
         return 0;
@@ -95,44 +95,43 @@ int main(int argc, char *argv[]) {
         mostrarAyuda();
         return 1;
     }
-    // Verificamos que los parametros sean correctos
+
     verificarParametros(argc, argv);
 
     int cantImpresiones = atoi(argv[2]);
     string rutaArchivo = argv[4];
 
-    // Creo el Fifo
-    mkfifo(NOMBRE_FIFO, 0666);
-
-    // Escribimos en el fifo publico
-
-    ofstream fifo(NOMBRE_FIFO);
-    string contenido = to_string(getpid()) + ":" + rutaArchivo;
-    fifo << contenido << ends;
-    fifo.close();
-
-    // creo fifo privado para recibir respuesta
+    // Crear FIFO privado antes de enviar la solicitud
     string fifoPrivado = "/tmp/FIFO_" + to_string(getpid());
     mkfifo(fifoPrivado.c_str(), 0666);
 
-    // Abrir el FIFO privado para lectura (se bloqueará hasta que el servidor lo abra para escritura)
+    // Abrir FIFO público y enviar solicitud
+    ofstream fifo(NOMBRE_FIFO);
+    if (!fifo) {
+        cerr << "Error al abrir el FIFO público" << endl;
+        unlink(fifoPrivado.c_str());
+        return 1;
+    }
+
+    fifo << getpid() << ":" << rutaArchivo << endl;
+    fifo.close();
+
+    // Esperar respuesta del servidor
     ifstream fifoRespuesta(fifoPrivado);
     string respuesta;
     
-    // Leer la respuesta del servidor
-    getline(fifoRespuesta, respuesta);
-    fifoRespuesta.close();
-
-    // Procesar la respuesta
-    if (respuesta == "OK") {
-        cout << "Impresión completada exitosamente." << endl;
+    if (getline(fifoRespuesta, respuesta)) {
+        if (respuesta == "OK") {
+            cout << "Impresión completada exitosamente." << endl;
+        } else {
+            cout << "Error en la impresión: " << respuesta << endl;
+        }
     } else {
-        // Asumimos que cualquier otra cosa es un mensaje de error
-        cout << "Error en la impresión: " << respuesta << endl;
+        cout << "No se recibió respuesta del servidor" << endl;
     }
 
-    // Limpiar recursos - eliminar el FIFO privado
+    fifoRespuesta.close();
     unlink(fifoPrivado.c_str());
 
     return 0;
-}    
+}

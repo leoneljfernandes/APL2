@@ -75,7 +75,7 @@ int validarParametros(int argc, char *argv[]) {
 }
 
 void mostrarAyuda() {
-    cout << "Uso: ./ejercicio1.cpp [OPCIONES]" << endl;
+    cout << "Uso: ./ejercicio2.cpp [OPCIONES]" << endl;
     cout << "Opciones:" << endl;
     cout << "   -h                           Muestra este mensaje de ayuda" << endl;
     cout << "   -d / --directorio <path>     Ruta del directorio a analizar. (Requerido)" <<endl;
@@ -141,6 +141,7 @@ void generarPaquetes(string subDirectorio, datosCompartidos& datos, int maxPaque
         if(datos.cantPaquetesGenerados == datos.cantMaxPaquetes || datos.cantPaquetesGenerados == maxPaquetesAGenerar){
             datos.fin = true;
             datos.cv_producido.notify_all(); // notificar a los consumidores
+            lock.unlock();
             return;
         }
         
@@ -185,21 +186,19 @@ void procesarPaquetes(string directorioProcesamiento, string subDirectorioProces
         //pido mutex
         unique_lock<mutex> lock(datos.mtx);
 
-        if(datos.buffer.empty() && datos.fin){
-                return;
-        }
-        if(datos.buffer.empty() ){
-            continue;
-        }
-
         //espero si el buffet esta vacio
         datos.cv_producido.wait(lock, [&datos]{
-            return !datos.buffer.empty() || datos.fin; });   
+            return !datos.buffer.empty() || datos.fin; }); 
+
+        if(datos.buffer.empty() && datos.fin){
+            lock.unlock();
+            return;
+        }
 
         // obtengo archivos a procesar
         string nombreArchivo = datos.buffer.back();
         datos.buffer.pop_back();
-        datos.cantPaquetesProcesados++;
+        
 
         //notifico al productor que hay espacio en buffer
         datos.cv_consumido.notify_one();
@@ -224,7 +223,10 @@ void procesarPaquetes(string directorioProcesamiento, string subDirectorioProces
                         if (pos1 != string::npos && pos2 != string::npos) {
                             int destinoSucursal = stoi(linea.substr(pos2 + 1));
                             double peso = stod(linea.substr(pos1 + 1, pos2 - pos1 - 1));
+                            lock.lock(); // Bloquear el mutex para acceder a los datos compartidos
+                            datos.cantPaquetesProcesados++;
                             datos.pesosPorSucursal[destinoSucursal - 1] += peso; // Acumular peso por sucursal
+                            lock.unlock(); // Desbloquear el mutex
                         }
                     }
                     archivo.close();
@@ -266,7 +268,7 @@ int main(int argc, char *argv[]){
     int cantPaquetes = 0;
 
     // verificar parametro -h
-    if (argc > 1 && strcmp(argv[1], "-h") == 0){
+    if (argc > 1 && strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
         mostrarAyuda();
         return 0;
     }

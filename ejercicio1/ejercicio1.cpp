@@ -54,7 +54,7 @@ void mostrarAyuda() {
 int main(int argc, char *argv[]){
 
     // verificar parametro -h
-    if (argc > 1 && strcmp(argv[1], "-h") == 0){
+    if (argc > 1 && strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
         mostrarAyuda();
         return 0;
     }

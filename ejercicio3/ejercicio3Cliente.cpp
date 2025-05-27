@@ -21,8 +21,8 @@ void mostrarAyuda() {
     cout << " -a / --archivo <ruta archivo>     Archivo a imprimir. (Requerido)." << endl;
     cout << endl;
     cout << "Ejemplos:" << endl;
-    cout << "  ./programa -i 2 -a ./archivos/prueba         # Ejecución normal" << endl;
-    cout << "  ./programa -h                                # Muestra ayuda" << endl;
+    cout << "  ./ejercicio3Cliente -i 2 -a ./archivos/prueba         # Ejecución normal" << endl;
+    cout << "  ./ejercicio3Cliente -h                                # Muestra ayuda" << endl;
 }
 
 void verificarParametros(int argc, char *argv[]) {

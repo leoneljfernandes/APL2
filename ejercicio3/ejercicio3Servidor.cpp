@@ -12,6 +12,7 @@
 #include <algorithm>
 
 #define NOMBRE_FIFO "miFifo"
+#define BUFFER_SIZE 1024
 
 using namespace std;
 
@@ -25,110 +26,191 @@ void mostrarAyuda() {
     cout << "  -h                               Muestra este mensaje de ayuda" << endl;
     cout << endl;
     cout << "Ejemplos:" << endl;
-    cout << "  ./programa        # Ejecución normal" << endl;
-    cout << "  ./programa -h     # Muestra ayuda" << endl;
+    cout << "  ./ejercicio3Servidor        # Ejecución normal" << endl;
+    cout << "  ./ejercicio3Servidor -h     # Muestra ayuda" << endl;
 }
 
-void manejarSenial(int signal) {
-    unlink(NOMBRE_FIFO);
-    exit(0);
-}
 
+/*
 int main(int argc, char *argv[]) {
-    signal(SIGINT, manejarSenial);
-    signal(SIGTERM, manejarSenial);
 
-    if (argc > 1 && strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
+    if (argc > 1 && strcmp(argv[1], "-h") == 0) {
         mostrarAyuda();
         return 0;
     }
 
-    // Limpiamos la cola de impresión y resultados previos
+    // Limpiamos la cola de impresion y resultados previos
     unlink(NOMBRE_FIFO);
 
-    string LOG_TEMPORAL = "/tmp/impresiones.log";
+    string LOG_TEMPORAL = "/tmp/impresiones.log"; // creo log
     // Limpiamos el archivo de log
-    try {
+    try{
         ofstream log(LOG_TEMPORAL, ios::trunc);
         log.close();
-    } catch (const exception& e) {
-        cerr << "Error al limpiar el archivo de log: " << e.what() << endl;
-        return 1;
+    }catch (const exception& e) {
+        cout << "Error al limpiar el archivo de log: " << e.what() << endl;
     }
+    // creo el archivo fifo
+    mkfifo(NOMBRE_FIFO, 0666);
 
-    // Creamos el FIFO público
-    if (mkfifo(NOMBRE_FIFO, 0666) == -1) {
-        perror("Error al crear el FIFO público");
-        return 1;
-    }
+    // Leemos el fifo de uno a la vez
+    while(true){
+        ifstream fifo(NOMBRE_FIFO);
+        string buffer;
 
-    // Abrimos el FIFO público en modo lectura
-    int fd_fifo = open(NOMBRE_FIFO, O_RDONLY);
-    if (fd_fifo == -1) {
-        perror("Error al abrir el FIFO público");
-        return 1;
-    }
+        while(getline(fifo, buffer)){
 
-    // Buffer para lectura
-    char buffer[1024];
-    ssize_t bytes_leidos;
+            if(!buffer.empty()){
+                size_t sep = buffer.find(':');
+                if(sep != string:: npos){
+                    string pidCliente = buffer.substr(0, sep);
+                    string archivo = buffer.substr(sep + 1);
 
-    while(true) {
-        bytes_leidos = read(fd_fifo, buffer, sizeof(buffer)-1);
-        if (bytes_leidos > 0) {
-            buffer[bytes_leidos] = '\0';
-            string mensaje(buffer);
-            
-            if (!mensaje.empty()) {
-                size_t sep = mensaje.find(':');
-                if (sep != string::npos) {
-                    string pidCliente = mensaje.substr(0, sep);
-                    string archivo = mensaje.substr(sep + 1);
-
-                    // Eliminar posibles saltos de línea
-                    archivo.erase(std::remove(archivo.begin(), archivo.end(), '\n'), archivo.end());
-                    archivo.erase(std::remove(archivo.begin(), archivo.end(), '\r'), archivo.end());
-
-                    // Simular impresión
+                    //simular impresion
                     cout << "Imprimiendo archivo: " << archivo << endl;
-                    sleep(2); // Tiempo de impresión simulado
+                    sleep(2); // Simulamos un tiempo de impresión de 2 segundos
 
-                    // Procesar archivo y log
+                    // abro archivo y log en append para escribir
                     ifstream archivoImpreso(archivo);
                     ofstream log(LOG_TEMPORAL, ios::app);
 
-                    if (archivoImpreso && log) {
-                        // Obtener tiempo actual
-                        auto ahora = chrono::system_clock::now();
-                        time_t tiempo_actual = chrono::system_clock::to_time_t(ahora);
-                        tm* tiempo_local = localtime(&tiempo_actual);
+                    if(archivoImpreso && log){
+                        // Obtener el tiempo actual
+                        auto ahora = std::chrono::system_clock::now();
+                        std::time_t tiempo_actual = std::chrono::system_clock::to_time_t(ahora);
+                        // Convertir a estructura tm para formateo
+                        std::tm* tiempo_local = std::localtime(&tiempo_actual);
+                        // Crear un stringstream para formatear
+                        std::ostringstream oss;
 
-                        // Formatear mensaje de log
-                        ostringstream oss;
+                        // Formatear según lo solicitado
                         oss << "PID {" << pidCliente << "} imprimió el archivo {" << archivo
-                            << "} el día {" << put_time(tiempo_local, "%d/%m/%Y")
-                            << "} a las {" << put_time(tiempo_local, "%H:%M:%S") << "}";
+                            << "} el día {" << std::put_time(tiempo_local, "%d/%m/%Y")
+                            << "} a las {" << std::put_time(tiempo_local, "%H:%M:%S") << "}";
 
                         log << oss.str() << endl;
                         log << archivoImpreso.rdbuf() << endl << endl;
-
-                        // Enviar respuesta al cliente
+                        
                         string fifoRespuestaPrivado = "/tmp/FIFO_" + pidCliente;
                         ofstream respuesta(fifoRespuestaPrivado);
                         respuesta << "OK" << endl;
                         respuesta.close();
-                    } else {
+                        unlink(fifoRespuestaPrivado.c_str()); // Eliminar FIFO privado
+
+                        
+
+                    }else{
+                        // Enviar mensaje de error al cliente
                         string fifoCliente = "/tmp/FIFO_" + pidCliente;
                         ofstream respuesta(fifoCliente);
                         respuesta << "Error al procesar el archivo" << endl;
                         respuesta.close();
+                        unlink(fifoCliente.c_str()); // Eliminar FIFO privado
                     }
+
                 }
             }
+
+        }
+        //cierro fifo publico
+        fifo.clear();
+        fifo.close();
+
+    }
+    
+
+}
+*/
+
+int main(int argc, char *argv[]) {
+    if (argc > 1 && strcmp(argv[1], "-h") == 0) {
+        mostrarAyuda();
+        return 0;
+    }
+
+    unlink(NOMBRE_FIFO);
+    string LOG_TEMPORAL = "/tmp/impresiones.log";
+    
+    // Limpiar archivo de log
+    ofstream log(LOG_TEMPORAL, ios::trunc);
+    log.close();
+
+    // Crear el FIFO
+    if (mkfifo(NOMBRE_FIFO, 0666) == -1) {
+        perror("Error al crear el FIFO");
+        return 1;
+    }
+
+    // Abrir el FIFO en modo lectura/escritura para evitar bloqueos
+    int fd = open(NOMBRE_FIFO, O_RDWR);
+    if (fd == -1) {
+        perror("Error al abrir el FIFO");
+        return 1;
+    }
+
+    char buffer[BUFFER_SIZE];
+    ssize_t bytes_leidos;
+
+    cout << "Servidor de impresión iniciado. Esperando trabajos..." << endl;
+
+    while (true) {
+        bytes_leidos = read(fd, buffer, BUFFER_SIZE - 1);
+        
+        if (bytes_leidos > 0) {
+            buffer[bytes_leidos] = '\0';
+            string mensaje(buffer);
+            
+            size_t sep = mensaje.find(':');
+            if (sep != string::npos) {
+                string pidCliente = mensaje.substr(0, sep);
+                string archivo = mensaje.substr(sep + 1);
+                
+                // Eliminar posibles saltos de línea
+                archivo.erase(remove(archivo.begin(), archivo.end(), '\n'), archivo.end());
+
+                cout << "Imprimiendo archivo: " << archivo << " para cliente " << pidCliente << endl;
+                sleep(2); // Simular tiempo de impresión
+
+                // Procesar archivo
+                ifstream archivoImpreso(archivo);
+                ofstream log(LOG_TEMPORAL, ios::app);
+
+                if (archivoImpreso && log) {
+                    auto ahora = chrono::system_clock::now();
+                    time_t tiempo_actual = chrono::system_clock::to_time_t(ahora);
+                    tm* tiempo_local = localtime(&tiempo_actual);
+                    
+                    ostringstream oss;
+                    oss << "PID {" << pidCliente << "} imprimió el archivo {" << archivo
+                        << "} el día {" << put_time(tiempo_local, "%d/%m/%Y")
+                        << "} a las {" << put_time(tiempo_local, "%H:%M:%S") << "}";
+
+                    log << oss.str() << endl;
+                    log << archivoImpreso.rdbuf() << endl << endl;
+                    
+                    // Responder al cliente
+                    string fifoRespuesta = "/tmp/FIFO_" + pidCliente;
+                    ofstream respuesta(fifoRespuesta);
+                    if (respuesta) {
+                        respuesta << "OK" << endl;
+                    }
+                    respuesta.close();
+                } else {
+                    string fifoRespuesta = "/tmp/FIFO_" + pidCliente;
+                    ofstream respuesta(fifoRespuesta);
+                    if (respuesta) {
+                        respuesta << "Error al procesar el archivo" << endl;
+                    }
+                    respuesta.close();
+                }
+            }
+        } else if (bytes_leidos == -1) {
+            perror("Error al leer del FIFO");
+            break;
         }
     }
 
-    close(fd_fifo);
+    close(fd);
     unlink(NOMBRE_FIFO);
     return 0;
 }

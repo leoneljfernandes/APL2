@@ -52,6 +52,9 @@ void validarNickname(const string &nickname) {
 
 int main(int argc, char *argv[]){
 
+     // Configurar manejo de señales
+    signal(SIGINT, SIG_IGN);  // Ignorar SIGINT
+
     if (argc < 1){
         cout << "Parametros incompletos." << endl;
         mostrarAyuda();
@@ -183,7 +186,7 @@ int main(int argc, char *argv[]){
     }
 
     // Semáforo para controlar cliente único
-    sem_t *semaforoClienteUnico = sem_open(NOMBRE_SEMAFORO_CLIENTE_UNICO, O_CREAT, 0600, 1);
+    sem_t *semaforoClienteUnico = sem_open(NOMBRE_SEMAFORO_CLIENTE_UNICO, O_CREAT, 0600, 0);
     if (semaforoClienteUnico == SEM_FAILED) {
         cerr << "Error al crear el semáforo de cliente único." << endl;
         sem_close(semaforoServidor);
@@ -202,10 +205,174 @@ int main(int argc, char *argv[]){
     //espero servidor conectado
     cout << "Cliente iniciado. Esperando conexión al servidor..." << endl;
     // Esperar a que el servidor esté listo
+    if (sem_wait(semaforoServidor) == -1) {
+        cerr << "Error al esperar el semáforo del servidor." << endl;
+        sem_close(semaforoServidor);
+        sem_close(semaforoCliente);
+        sem_close(semaforoClienteUnico);
+        sem_unlink(NOMBRE_SEMAFORO_SERVIDOR);
+        sem_unlink(NOMBRE_SEMAFORO_CLIENTE);
+        sem_unlink(NOMBRE_SEMAFORO_CLIENTE_UNICO);
+        munmap(respuesta, sizeof(RespuestaServidor));
+        shm_unlink(NOMBRE_MEMORIA_RESPUESTA);
+        munmap(nicknameCliente, 20 * sizeof(char));
+        shm_unlink("miMemoriaNickname");
+        munmap(letraADivinar, sizeof(char));
+        shm_unlink(NOMBRE_MEMORIA);
+        return 1;
+    } 
+    // copiar el nickname del cliente a la memoria compartida  
+    strncpy(nicknameCliente,argv[2],20);
+    nicknameCliente[19]= '\0'; // Asegurar que el nickname esté terminado en null
+    cout << "cliente conectado con nickname" << nicknameCliente << endl;
+    // liberar el semaforo del servidor para continuar
+    sem_post(semaforoServidor);
+    //Esperar a que el servidor esté listo para recibir la letra
+    if (sem_wait(semaforoCliente) == -1) {
+        cerr << "Error al esperar el semáforo del cliente." << endl;
+        sem_close(semaforoServidor);
+        sem_close(semaforoCliente);
+        sem_close(semaforoClienteUnico);
+        sem_unlink(NOMBRE_SEMAFORO_SERVIDOR);
+        sem_unlink(NOMBRE_SEMAFORO_CLIENTE);
+        sem_unlink(NOMBRE_SEMAFORO_CLIENTE_UNICO);
+        munmap(respuesta, sizeof(RespuestaServidor));
+        shm_unlink(NOMBRE_MEMORIA_RESPUESTA);
+        munmap(nicknameCliente, 20 * sizeof(char));
+        shm_unlink("miMemoriaNickname");
+        munmap(letraADivinar, sizeof(char));
+        shm_unlink(NOMBRE_MEMORIA);
+        return 1;
+    }
+    if(sem_wait(semaforoClienteUnico) == -1) {
+        cerr << "Error al esperar el semáforo del cliente único." << endl;
+        sem_close(semaforoServidor);
+        sem_close(semaforoCliente);
+        sem_close(semaforoClienteUnico);
+        sem_unlink(NOMBRE_SEMAFORO_SERVIDOR);
+        sem_unlink(NOMBRE_SEMAFORO_CLIENTE);
+        sem_unlink(NOMBRE_SEMAFORO_CLIENTE_UNICO);
+        munmap(respuesta, sizeof(RespuestaServidor));
+        shm_unlink(NOMBRE_MEMORIA_RESPUESTA);
+        munmap(nicknameCliente, 20 * sizeof(char));
+        shm_unlink("miMemoriaNickname");
+        munmap(letraADivinar, sizeof(char));
+        shm_unlink(NOMBRE_MEMORIA);
+        return 1;
+    }
+    // Esperar a que el servidor esté listo para recibir la letra
+    cout << "Servidor listo para recibir la letra." << endl;
+    // Bucle principal del cliente
+    while(true){
+        // recibe la frase a adivinar del servidor
+        cout << "Ingrese una letra para adivinar la frase (o 'exit' para salir): ";
+        string letraAIngresar;
+        cin>> letraAIngresar;
+        if (letraAIngresar == "exit") {
+            cout << "Saliendo del cliente." << endl;
+            break;
+        }
+        if(letraAIngresar.length()!=1){
+            cout << "Por favor, ingrese solo una letra." << endl;
+            continue;
+        }
+        // copio la letra a la memoria compartida
+        *letraADivinar= letraAIngresar[0];
+        // libero el semáforo del servidor para que procese la letra
+        if (sem_post(semaforoServidor) == -1) {
+            cerr << "Error al liberar el semáforo del servidor." << endl;
+            sem_close(semaforoServidor);
+            sem_close(semaforoCliente);
+            sem_close(semaforoClienteUnico);
+            sem_unlink(NOMBRE_SEMAFORO_SERVIDOR);
+            sem_unlink(NOMBRE_SEMAFORO_CLIENTE);
+            sem_unlink(NOMBRE_SEMAFORO_CLIENTE_UNICO);
+            munmap(respuesta, sizeof(RespuestaServidor));
+            shm_unlink(NOMBRE_MEMORIA_RESPUESTA);
+            munmap(nicknameCliente, 20 * sizeof(char));
+            shm_unlink("miMemoriaNickname");
+            munmap(letraADivinar, sizeof(char));
+            shm_unlink(NOMBRE_MEMORIA);
+            return 1;
+        }
+        // espero la respuesta del server
+        if (sem_wait(semaforoCliente) == -1) {
+            cerr << "Error al esperar el semáforo del cliente." << endl;
+            sem_close(semaforoServidor);
+            sem_close(semaforoCliente);
+            sem_close(semaforoClienteUnico);
+            sem_unlink(NOMBRE_SEMAFORO_SERVIDOR);
+            sem_unlink(NOMBRE_SEMAFORO_CLIENTE);
+            sem_unlink(NOMBRE_SEMAFORO_CLIENTE_UNICO);
+            munmap(respuesta, sizeof(RespuestaServidor));
+            shm_unlink(NOMBRE_MEMORIA_RESPUESTA);
+            munmap(nicknameCliente, 20 * sizeof(char));
+            shm_unlink("miMemoriaNickname");
+            munmap(letraADivinar, sizeof(char));
+            shm_unlink(NOMBRE_MEMORIA);
+            return 1;
+        }
+        // espero el semáforo del cliente único para asegurarme de que solo un cliente está conectado
+        if (sem_wait(semaforoClienteUnico) == -1) {
+            cerr << "Error al esperar el semáforo del cliente único." << endl;
+            sem_close(semaforoServidor);
+            sem_close(semaforoCliente);
+            sem_close(semaforoClienteUnico);
+            sem_unlink(NOMBRE_SEMAFORO_SERVIDOR);
+            sem_unlink(NOMBRE_SEMAFORO_CLIENTE);
+            sem_unlink(NOMBRE_SEMAFORO_CLIENTE_UNICO);
+            munmap(respuesta, sizeof(RespuestaServidor));
+            shm_unlink(NOMBRE_MEMORIA_RESPUESTA);
+            munmap(nicknameCliente, 20 * sizeof(char));
+            shm_unlink("miMemoriaNickname");
+            munmap(letraADivinar, sizeof(char));
+            shm_unlink(NOMBRE_MEMORIA);
+            return 1;
+        }
+        //leo la respuesta del server
+        bool letraCorrecta= respuesta->letraCorrecta;
+        int intentosRestantes= respuesta->intentosRestantes;
+        if(letraCorrecta){
+            cout << "¡Correcto! La letra '" << letraAIngresar << "' está en la frase." << endl;
+        } else {
+            cout << "Incorrecto. La letra '" << letraAIngresar << "' no está en la frase." << endl;
+        }
+        cout << "Intentos restantes: " << intentosRestantes << endl;
+        if(intentosRestantes <= 0){
+            cout << "Has agotado tus intentos. Fin de la partida." << endl;
+            break;
+        }
+        //verificar si el servidor finalizó la partida
+        if (respuesta->letraCorrecta && intentosRestantes > 0) {
+            cout << "¡Felicidades! Has adivinado la letra correctamente." << endl;
+        } else {
+            cout << "Sigue intentando. Te quedan " << intentosRestantes << " intentos." << endl;
+        }
+        // verificar si el servidor finalizó la partida
+        if (respuesta->intentosRestantes <= 0) {
+            cout << "La partida ha terminado. No quedan más intentos." << endl;
+            break;
+        }
+
     
-
-
-
+    }
+    // liberar recursos, desmapear memoria y cerrar semaforos
+    sem_close(semaforoServidor);
+    sem_close(semaforoCliente);
+    sem_close(semaforoClienteUnico);
+    sem_unlink(NOMBRE_SEMAFORO_SERVIDOR);
+    sem_unlink(NOMBRE_SEMAFORO_CLIENTE);
+    sem_unlink(NOMBRE_SEMAFORO_CLIENTE_UNICO);
+    munmap(respuesta, sizeof(RespuestaServidor));          // Desmapear respuesta
+    shm_unlink(NOMBRE_MEMORIA_RESPUESTA);                // Eliminar memoria de respuesta
+    munmap(nicknameCliente, 20 * sizeof(char));           // Desmapear nickname
+    shm_unlink("miMemoriaNickname");                     // Eliminar memoria de nickname
+    munmap(letraADivinar, sizeof(char));                  // Desmapear letra
+    shm_unlink(NOMBRE_MEMORIA);                          // Eliminar memoria de letra
+    close(idMemoriaRespuesta);                            // Cerrar descriptor de respuesta
+    close(idMemoriaNickname);                            // Cerrar descriptor de nickname
+    close(idMemoria);                                    // Cerrar descriptor de letra
+    cout << "Cliente finalizado correctamente." << endl;
 
 
 

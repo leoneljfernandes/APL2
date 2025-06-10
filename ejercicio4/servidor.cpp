@@ -118,6 +118,9 @@ vector<string> obtenerFrases(string rutaArchivo){
     
 }
 
+bool partida_en_curso = false;
+bool finalizar_servidor = false;
+
 void manejador_seniales(int signal) {
     switch(signal) {
         case SIGUSR1:
@@ -141,8 +144,7 @@ struct respuestaCliente {
     int intentosRestantes;
 };
 
-bool partida_en_curso = false;
-bool finalizar_servidor = false;
+
 
 //ordenar ranking de clientes por bool true primero y luego por tiempo
 void ordenarRanking(vector<pair<pair<bool, string>, chrono::microseconds>> &rankingClientes) {
@@ -291,7 +293,7 @@ int main(int argc, char *argv[]){
     }
 
     // creo semaforos
-    sem_t *semaforoServidor = sem_open(NOMBRE_SEMAFORO_SERVIDOR, O_CREAT, 0600, 0);
+    sem_t *semaforoServidor = sem_open(NOMBRE_SEMAFORO_SERVIDOR, O_CREAT, 0600, 1);
     if (semaforoServidor == SEM_FAILED) {
         cerr << "Error al crear el semaforo servidor" << endl;
         
@@ -332,7 +334,7 @@ int main(int argc, char *argv[]){
         return 1;
     }
 
-    sem_t *semaforoClienteUnico = sem_open(NOMBRE_SEMAFORO_CLIENTE_UNICO, O_CREAT, 0600, 1);
+    sem_t *semaforoClienteUnico = sem_open(NOMBRE_SEMAFORO_CLIENTE_UNICO, O_CREAT, 0600, 0);
     if (semaforoClienteUnico == SEM_FAILED) {
         cerr << "Error al crear el semáforo del cliente." << endl;
         
@@ -356,29 +358,7 @@ int main(int argc, char *argv[]){
         return 1;
     }
 
-    // Verificar que este solo 1 servidor corriendo
-    if(sem_trywait(semaforoServidor) == -1){
-        cerr << "Ya hay un servidor corriendo." << endl;
-
-        //libero todos los recursos
-        sem_close(semaforoServidor);  // 1. Cerrar semáforo del servidor
-        sem_close(semaforoCliente);   // 2. Cerrar semáforo del cliente
-        sem_close(semaforoClienteUnico);
-        munmap(respuesta, sizeof(respuestaCliente));          // 1. Desmapear respuesta
-        munmap(nicknameCliente, 20 * sizeof(char));           // 2. Desmapear nickname
-        munmap(letrAAdivinar, sizeof(char));                  // 3. Desmapear letra
-        close(idMemoriaRespuesta);                            // 4. Cerrar descriptor de respuesta
-        shm_unlink(NOMBRE_MEMORIA_RESPUESTA);                // 5. Eliminar memoria de respuesta
-        close(idMemoriaNickname);                            // 6. Cerrar descriptor de nickname
-        shm_unlink("miMemoriaNickname");                     // 7. Eliminar memoria de nickname
-        close(idMemoria);                                    // 8. Cerrar descriptor de letra
-        shm_unlink(NOMBRE_MEMORIA);                          // 9. Eliminar memoria de letra
-        
-        sem_unlink(NOMBRE_SEMAFORO_SERVIDOR);
-        sem_unlink(NOMBRE_SEMAFORO_CLIENTE);
-        sem_unlink(NOMBRE_SEMAFORO_CLIENTE_UNICO);                 // 10. Eliminar semáforo del cliente
-        return 1;
-    }
+   
 
     // Ranking cliente
     vector<pair<pair<bool, string>, chrono::microseconds>> rankingClientes;
@@ -388,6 +368,7 @@ int main(int argc, char *argv[]){
     // bucle principal del servidor
     cout << "Servidor iniciado. Esperando cliente." << endl;
     while(!finalizar_servidor){
+   
 
         sem_wait(semaforoServidor); // Espero a que un cliente se conecte
 

@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <signal.h>
 #include <csignal>
+#include <cstring>
 
 using namespace std;
 
@@ -204,29 +205,15 @@ int main(int argc, char *argv[]){
 
     //espero servidor conectado
     cout << "Cliente iniciado. Esperando conexión al servidor..." << endl;
-    // Esperar a que el servidor esté listo
-    if (sem_wait(semaforoServidor) == -1) {
-        cerr << "Error al esperar el semáforo del servidor." << endl;
-        sem_close(semaforoServidor);
-        sem_close(semaforoCliente);
-        sem_close(semaforoClienteUnico);
-        sem_unlink(NOMBRE_SEMAFORO_SERVIDOR);
-        sem_unlink(NOMBRE_SEMAFORO_CLIENTE);
-        sem_unlink(NOMBRE_SEMAFORO_CLIENTE_UNICO);
-        munmap(respuesta, sizeof(RespuestaServidor));
-        shm_unlink(NOMBRE_MEMORIA_RESPUESTA);
-        munmap(nicknameCliente, 20 * sizeof(char));
-        shm_unlink("miMemoriaNickname");
-        munmap(letraADivinar, sizeof(char));
-        shm_unlink(NOMBRE_MEMORIA);
-        return 1;
-    } 
+    
     // copiar el nickname del cliente a la memoria compartida  
     strncpy(nicknameCliente,argv[2],20);
     nicknameCliente[19]= '\0'; // Asegurar que el nickname esté terminado en null
-    cout << "cliente conectado con nickname" << nicknameCliente << endl;
+    cout << "cliente conectado con nickname " << nicknameCliente << endl;
     // liberar el semaforo del servidor para continuar
     sem_post(semaforoServidor);
+    sem_post(semaforoClienteUnico); // Indicar que el cliente está listo para jugar
+    cout << "Cliente listo para jugar." << endl;
     //Esperar a que el servidor esté listo para recibir la letra
     if (sem_wait(semaforoCliente) == -1) {
         cerr << "Error al esperar el semáforo del cliente." << endl;

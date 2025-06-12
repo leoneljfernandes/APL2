@@ -161,7 +161,7 @@ int main(int argc, char *argv[]){
 
     // creamos los semaforos
     //creo los semáforos que van a controlar el acceso a la memoria compartida
-    sem_t *semaforoServidor = sem_open(NOMBRE_SEMAFORO_SERVIDOR, O_CREAT, 0600, 1);
+    sem_t *semaforoServidor = sem_open(NOMBRE_SEMAFORO_SERVIDOR, O_CREAT, 0600, 0);
     if (semaforoServidor == SEM_FAILED) {
         cerr << "Error al crear el semáforo del servidor." << endl;
         munmap(respuesta, sizeof(RespuestaServidor));
@@ -187,7 +187,7 @@ int main(int argc, char *argv[]){
     }
 
     // Semáforo para controlar cliente único
-    sem_t *semaforoClienteUnico = sem_open(NOMBRE_SEMAFORO_CLIENTE_UNICO, O_CREAT, 0600, 0);
+    sem_t *semaforoClienteUnico = sem_open(NOMBRE_SEMAFORO_CLIENTE_UNICO, O_CREAT, 0600, 1);
     if (semaforoClienteUnico == SEM_FAILED) {
         cerr << "Error al crear el semáforo de cliente único." << endl;
         sem_close(semaforoServidor);
@@ -250,6 +250,9 @@ int main(int argc, char *argv[]){
     // Esperar a que el servidor esté listo para recibir la letra
     cout << "Servidor listo para recibir la letra." << endl;
     // Bucle principal del cliente
+    sem_post(semaforoServidor); // Liberar el semáforo del servidor para que pueda procesar la conexión
+    sem_wait(semaforoCliente);
+
     while(true){
         // recibe la frase a adivinar del servidor
         cout << "Ingrese una letra para adivinar la frase (o 'exit' para salir): ";
@@ -265,57 +268,12 @@ int main(int argc, char *argv[]){
         }
         // copio la letra a la memoria compartida
         *letraADivinar= letraAIngresar[0];
+
         // libero el semáforo del servidor para que procese la letra
-        if (sem_post(semaforoServidor) == -1) {
-            cerr << "Error al liberar el semáforo del servidor." << endl;
-            sem_close(semaforoServidor);
-            sem_close(semaforoCliente);
-            sem_close(semaforoClienteUnico);
-            sem_unlink(NOMBRE_SEMAFORO_SERVIDOR);
-            sem_unlink(NOMBRE_SEMAFORO_CLIENTE);
-            sem_unlink(NOMBRE_SEMAFORO_CLIENTE_UNICO);
-            munmap(respuesta, sizeof(RespuestaServidor));
-            shm_unlink(NOMBRE_MEMORIA_RESPUESTA);
-            munmap(nicknameCliente, 20 * sizeof(char));
-            shm_unlink("miMemoriaNickname");
-            munmap(letraADivinar, sizeof(char));
-            shm_unlink(NOMBRE_MEMORIA);
-            return 1;
-        }
-        // espero la respuesta del server
-        if (sem_wait(semaforoCliente) == -1) {
-            cerr << "Error al esperar el semáforo del cliente." << endl;
-            sem_close(semaforoServidor);
-            sem_close(semaforoCliente);
-            sem_close(semaforoClienteUnico);
-            sem_unlink(NOMBRE_SEMAFORO_SERVIDOR);
-            sem_unlink(NOMBRE_SEMAFORO_CLIENTE);
-            sem_unlink(NOMBRE_SEMAFORO_CLIENTE_UNICO);
-            munmap(respuesta, sizeof(RespuestaServidor));
-            shm_unlink(NOMBRE_MEMORIA_RESPUESTA);
-            munmap(nicknameCliente, 20 * sizeof(char));
-            shm_unlink("miMemoriaNickname");
-            munmap(letraADivinar, sizeof(char));
-            shm_unlink(NOMBRE_MEMORIA);
-            return 1;
-        }
-        // espero el semáforo del cliente único para asegurarme de que solo un cliente está conectado
-        if (sem_wait(semaforoClienteUnico) == -1) {
-            cerr << "Error al esperar el semáforo del cliente único." << endl;
-            sem_close(semaforoServidor);
-            sem_close(semaforoCliente);
-            sem_close(semaforoClienteUnico);
-            sem_unlink(NOMBRE_SEMAFORO_SERVIDOR);
-            sem_unlink(NOMBRE_SEMAFORO_CLIENTE);
-            sem_unlink(NOMBRE_SEMAFORO_CLIENTE_UNICO);
-            munmap(respuesta, sizeof(RespuestaServidor));
-            shm_unlink(NOMBRE_MEMORIA_RESPUESTA);
-            munmap(nicknameCliente, 20 * sizeof(char));
-            shm_unlink("miMemoriaNickname");
-            munmap(letraADivinar, sizeof(char));
-            shm_unlink(NOMBRE_MEMORIA);
-            return 1;
-        }
+        sem_post(semaforoServidor);
+
+        sem_wait(semaforoCliente); // Espero a que el servidor procese la letra
+        
         //leo la respuesta del server
         bool letraCorrecta= respuesta->letraCorrecta;
         int intentosRestantes= respuesta->intentosRestantes;
@@ -341,7 +299,8 @@ int main(int argc, char *argv[]){
             break;
         }
 
-    
+        sem_wait(semaforoCliente);
+
     }
     // liberar recursos, desmapear memoria y cerrar semaforos
     sem_close(semaforoServidor);

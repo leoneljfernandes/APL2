@@ -12,6 +12,7 @@
 #include <signal.h>
 #include <csignal>
 #include <chrono>
+#include <string.h>
 
 using namespace std;
 
@@ -183,7 +184,7 @@ int main(int argc, char *argv[]){
         return 1;
     }
 
-    if(argv[1] == "-h" || argv[1] == "--help") {
+    if(strcmp(argv[1], "-h") == 0 || strcmp(argv[1], "--help") == 0) {
         mostrarAyuda();
         return 0;
     }
@@ -293,7 +294,7 @@ int main(int argc, char *argv[]){
     }
 
     // creo semaforos
-    sem_t *semaforoServidor = sem_open(NOMBRE_SEMAFORO_SERVIDOR, O_CREAT, 0600, 1);
+    sem_t *semaforoServidor = sem_open(NOMBRE_SEMAFORO_SERVIDOR, O_CREAT, 0600, 0);
     if (semaforoServidor == SEM_FAILED) {
         cerr << "Error al crear el semaforo servidor" << endl;
         
@@ -312,7 +313,7 @@ int main(int argc, char *argv[]){
         return 1;
     }
 
-    sem_t *semaforoCliente = sem_open(NOMBRE_SEMAFORO_CLIENTE, O_CREAT, 0600, 1);
+    sem_t *semaforoCliente = sem_open(NOMBRE_SEMAFORO_CLIENTE, O_CREAT, 0600, 0);
     if (semaforoCliente == SEM_FAILED) {
         cerr << "Error al crear el semáforo del cliente." << endl;
         
@@ -334,7 +335,7 @@ int main(int argc, char *argv[]){
         return 1;
     }
 
-    sem_t *semaforoClienteUnico = sem_open(NOMBRE_SEMAFORO_CLIENTE_UNICO, O_CREAT, 0600, 0);
+    sem_t *semaforoClienteUnico = sem_open(NOMBRE_SEMAFORO_CLIENTE_UNICO, O_CREAT, 0600, 1);
     if (semaforoClienteUnico == SEM_FAILED) {
         cerr << "Error al crear el semáforo del cliente." << endl;
         
@@ -380,11 +381,10 @@ int main(int argc, char *argv[]){
         }
 
         // verificar que haya solo un cliente conectado
-        if(sem_trywait(semaforoClienteUnico) == -1){
-            cerr << "Ya hay un cliente conectado." << endl;
-            sem_post(semaforoServidor); // Libero el semáforo del servidor
-            continue; // Vuelvo al inicio del bucle
+        if(sem_trywait(semaforoCliente) == -1){
+            cerr << "Ya hay un cliente conectado." << endl;  
         }
+        sem_wait(semaforoClienteUnico); // Vuelvo al inicio del bucle
 
         int indiceAleatorio = rand() % frasesDisponibles.size();
         string fraseAdivinar = frasesDisponibles[indiceAleatorio];
@@ -398,6 +398,7 @@ int main(int argc, char *argv[]){
             fraseAdivinarAUsar.end(), [](unsigned char c) { return std::isspace(c); }), fraseAdivinarAUsar.end());
         
         while((intentosUtilizados < cantidadIntentos) && !adivinoFrase && !finalizar_servidor){
+            sem_wait(semaforoServidor);
 
             char letraRecibida = *letrAAdivinar;
             bool letraCorrecta = false;
@@ -430,6 +431,9 @@ int main(int argc, char *argv[]){
                 respuesta->intentosRestantes = cantidadIntentos - (intentosUtilizados + 1);
                 intentosUtilizados++;
             }
+            sem_post(semaforoCliente); // Libero el semáforo del cliente para que procese la respuesta
+            sem_post(semaforoClienteUnico); // Libero el semáforo del cliente único para que otro cliente pueda conectarse
+
         }
 
         partida_en_curso = false; // La partida ha terminado
@@ -443,10 +447,10 @@ int main(int argc, char *argv[]){
         if(finalizar_servidor){ // termina por el sigusr2
             cout << "Servidor finalizado por señal." << endl;
             mostrarResultados(rankingClientes, nombreClienteGanador, tiempoClienteGanador);
+            sem_post(semaforoClienteUnico); // Libero el semáforo del cliente único
             break;
         }
         
-        sem_post(semaforoClienteUnico); // Libero el semáforo del cliente único
         sem_post(semaforoCliente);
     }
 

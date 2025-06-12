@@ -1,5 +1,3 @@
-la computadora no se apaga
-el archivo fue eliminado
-proceso en estado bloqueado
-memoria virtual agotada
-el kernel gestiona los recursos
+prueba primera
+boca juniors
+estudiantes de la plata

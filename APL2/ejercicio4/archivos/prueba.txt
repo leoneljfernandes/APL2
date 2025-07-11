@@ -1,0 +1,5 @@
+prueba de apl
+aguante sisop
+ubuntu
+prueba otra vez
+segmentation fault

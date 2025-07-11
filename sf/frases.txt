@@ -1,0 +1,10 @@
+Que significa la sigla CPU en informatica
+Cual es el lenguaje de programacion mas utilizado para desarrollo web
+Que es un "byte" en terminos de almacenamiento
+Cual es el sistema operativo mas utilizado en servidores web
+Que protocolo se utiliza para transferir archivos a través de Internet
+Que estructura de datos sigue la lógica LIFO Last In First Out
+Que es un "bug" en un programa de software
+Que tecnologia es comunmente usada para virtualizar servidores
+Que es la "nube" en el contexto de informatica
+Cual de estos lenguajes NO es orientado a objetos

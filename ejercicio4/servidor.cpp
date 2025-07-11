@@ -1,3 +1,10 @@
+/*
+# Integrantes del grupo:
+# - Berti Rodrigo
+# - Burnowicz Alejo
+# - Fernandes Leonel
+# - Federico Agustin
+*/
 #include <fcntl.h>
 #include <iostream>
 #include <fstream>
@@ -23,64 +30,44 @@ using namespace std;
 #define NOMBRE_MEMORIA_RESPUESTA "miMemoriaRespuesta"
 
 void mostrarAyuda() {
-    cout << "Uso: ./ejercicio4Servidor.cpp [OPCIONES]" << endl;
+    cout << "Uso: ./servidor [OPCIONES]" << endl;
     cout << "Descripción:" << endl;
-    cout << "Este es el programa servidor tomara una frase aleatoria de un archivo "
-         << "y la enviara al cliente para ser adivinada." << endl;
+    cout << "Servidor para el juego de adivinanza de frases." << endl;
     cout << "Opciones:" << endl;
     cout << " -h                               Muestra este mensaje de ayuda" << endl;
-    cout << " -a / --archivo <ruta archivo>     Archivo de donde tomar las frases. (Requerido), cada frase debe estar en una linea." << endl;
-    cout << " -c / --cantidad <num>             Cantidad de intentos por partida (Requerido). Valor entero positivo." << endl;
-    
-    cout << endl;
+    cout << " -a / --archivo <ruta archivo>    Archivo con frases (una por línea)" << endl;
+    cout << " -c / --cantidad <num>            Intentos por partida (entero positivo)" << endl;
     cout << "Ejemplos:" << endl;
-    cout << "  ./ejercicio4Servidor -a ./archivos/prueba -c 2   #Ejecución normal" << endl;
-    cout << "  ./ejercicio4Servidor -h                          # Muestra ayuda" << endl;
+    cout << "  ./servidor -a frases.txt -c 5" << endl;
 }
 
 void verificarParametros(int argc, char *argv[]) {
-    for(int i = 1; i < argc; i++) {  // Empezar en 1 para omitir el nombre del programa
+    for(int i = 1; i < argc; i++) {
         string arg = argv[i];
         
         if (arg == "-c" || arg == "--cantidad") {
-            if (i + 1 >= argc) {
-                throw runtime_error("Falta la cantidad de intentos después de " + arg);
-            }
+            if (i + 1 >= argc) throw runtime_error("Falta la cantidad de intentos");
             
             string valor = argv[i+1];
             if (valor.find_first_not_of("0123456789") != string::npos) {
                 throw runtime_error("La cantidad de intentos debe ser un número entero positivo");
             }
 
-            if(stoi(valor) < 1) {
-                throw runtime_error("La cantidad de intentos debe ser mayor a 0");
-            }
-
-            i++;  // Saltar el valor del parámetro
+            if(stoi(valor) < 1) throw runtime_error("La cantidad de intentos debe ser mayor a 0");
+            i++;
             
         } else if (arg == "-a" || arg == "--archivo") {
-            if (i + 1 >= argc) {
-                throw runtime_error("Falta la ruta del archivo después de " + arg);
-            }
+            if (i + 1 >= argc) throw runtime_error("Falta la ruta del archivo");
             
             string rutaArchivo = argv[i+1];
-            
-            // Verificar existencia del archivo
             ifstream archivo(rutaArchivo);
-            if (!archivo.good()) {
-                throw runtime_error("El archivo no existe o no se puede leer: " + rutaArchivo);
-            }
+            if (!archivo.good()) throw runtime_error("El archivo no existe o no se puede leer");
             
-            // Verificar que el archivo no esté vacío
             archivo.seekg(0, ios::end);
-            if (archivo.tellg() == 0) {
-                throw runtime_error("El archivo está vacío: " + rutaArchivo);
-            }
-            
-            i++;  // Saltar el valor del parámetro
+            if (archivo.tellg() == 0) throw runtime_error("El archivo está vacío");
+            i++;
             
         } else if (arg == "-h" || arg == "--help") {
-            // No es un error, pero detenemos la validación
             return;
         } else {
             throw runtime_error("Parámetro desconocido: " + arg);
@@ -89,34 +76,26 @@ void verificarParametros(int argc, char *argv[]) {
 }
 
 vector<string> obtenerFrases(string rutaArchivo){
-    try{
+    try {
         ifstream archivo(rutaArchivo);
-        if (!archivo.is_open()) {
-            throw runtime_error("No se pudo abrir el archivo: " + rutaArchivo);
-        }
+        if (!archivo.is_open()) throw runtime_error("No se pudo abrir el archivo");
 
         string frase;
         vector<string> frasesDisponibles;
 
         while (getline(archivo, frase)) {
-            if (!frase.empty()) {  // Aseguramos que la frase no esté vacía
-                frasesDisponibles.push_back(frase);
-            }
+            if (!frase.empty()) frasesDisponibles.push_back(frase);
         }
 
         archivo.close();
 
-        if (frasesDisponibles.empty()) {
-            throw runtime_error("El archivo no contiene frases válidas.");
-        }
-
+        if (frasesDisponibles.empty()) throw runtime_error("El archivo no contiene frases válidas");
         return frasesDisponibles;
 
     } catch (const exception &e) {
         cerr << "Error al leer el archivo: " << e.what() << endl;
         return {};
     }
-    
 }
 
 bool partida_en_curso = false;
@@ -143,17 +122,13 @@ void manejador_seniales(int signal) {
 struct respuestaCliente {
     bool letraCorrecta;
     int intentosRestantes;
+    bool partidaTerminada;
 };
 
-
-
-//ordenar ranking de clientes por bool true primero y luego por tiempo
 void ordenarRanking(vector<pair<pair<bool, string>, chrono::microseconds>> &rankingClientes) {
     sort(rankingClientes.begin(), rankingClientes.end(), [](const auto &a, const auto &b) {
-        if (a.first.first != b.first.first) {
-            return a.first.first < b.first.first; // Ordenar por si adivinó o no
-        }
-        return a.second < b.second; // Si ambos adivinaron, ordenar por tiempo
+        if (a.first.first != b.first.first) return a.first.first < b.first.first;
+        return a.second < b.second;
     });
 }
 
@@ -172,9 +147,7 @@ void mostrarResultados(const vector<pair<pair<bool, string>, chrono::microsecond
 }
 
 int main(int argc, char *argv[]){
-
-    // Configurar manejo de señales
-    signal(SIGINT, SIG_IGN);  // Ignorar SIGINT
+    signal(SIGINT, SIG_IGN);
     signal(SIGUSR1, manejador_seniales);
     signal(SIGUSR2, manejador_seniales);
 
@@ -193,8 +166,6 @@ int main(int argc, char *argv[]){
 
     string rutaArchivo = argv[2];
     int cantidadIntentos = stoi(argv[4]);
-
-    // leo archiv y obtengo frases
     vector<string> frasesDisponibles = obtenerFrases(rutaArchivo);
 
     if (frasesDisponibles.empty()) {
@@ -202,7 +173,7 @@ int main(int argc, char *argv[]){
         return 1;
     }
 
-    // CREO LAS MEMORIAS COMPARTIDAS
+    // Configuración de memoria compartida
     int idMemoria = shm_open(NOMBRE_MEMORIA, O_CREAT | O_RDWR, 0600);
     if (idMemoria == -1) {
         cerr << "Error al crear la memoria compartida." << endl;
@@ -211,7 +182,7 @@ int main(int argc, char *argv[]){
 
     if (ftruncate(idMemoria, sizeof(char)) == -1) {
         cerr << "Error al definir el tamaño de la memoria compartida." << endl;
-        close(idMemoria);  // Cerrar descriptor antes de shm_unlink
+        close(idMemoria);
         shm_unlink(NOMBRE_MEMORIA);
         return 1;
     }
@@ -219,258 +190,248 @@ int main(int argc, char *argv[]){
     char *letrAAdivinar = (char *)mmap(NULL, sizeof(char), PROT_READ | PROT_WRITE, MAP_SHARED, idMemoria, 0);
     if (letrAAdivinar == MAP_FAILED) {
         cerr << "Error al mapear la memoria compartida." << endl;
-        close(idMemoria);  // Cerrar descriptor antes de shm_unlink
+        close(idMemoria);
         shm_unlink(NOMBRE_MEMORIA);
         return 1;
     }
 
     int idMemoriaNickname = shm_open("miMemoriaNickname", O_CREAT | O_RDWR, 0600);
     if (idMemoriaNickname == -1) {
-        cerr << "Error al crear la memoria compartida para el nickname." << endl;
-        munmap(letrAAdivinar, sizeof(char));  // Desmapear primero
-        close(idMemoria);  // Luego cerrar descriptor
+        cerr << "Error al crear la memoria para nickname." << endl;
+        munmap(letrAAdivinar, sizeof(char));
+        close(idMemoria);
         shm_unlink(NOMBRE_MEMORIA);
         return 1;
     }
 
     if (ftruncate(idMemoriaNickname, 20 * sizeof(char)) == -1) {
-        cerr << "Error al definir el tamaño de la memoria compartida para el nickname." << endl;
-        close(idMemoriaNickname);  // Cerrar descriptor de nickname
-        shm_unlink("miMemoriaNickname");  // Eliminar memoria de nickname
-        munmap(letrAAdivinar, sizeof(char));  // Desmapear letra
-        close(idMemoria);  // Cerrar descriptor de letra
-        shm_unlink(NOMBRE_MEMORIA);  // Eliminar memoria de letra
+        cerr << "Error al definir el tamaño de la memoria para nickname." << endl;
+        close(idMemoriaNickname);
+        shm_unlink("miMemoriaNickname");
+        munmap(letrAAdivinar, sizeof(char));
+        close(idMemoria);
+        shm_unlink(NOMBRE_MEMORIA);
         return 1;
     }
 
     char *nicknameCliente = (char *)mmap(NULL, 20 * sizeof(char), PROT_READ | PROT_WRITE, MAP_SHARED, idMemoriaNickname, 0);
     if (nicknameCliente == MAP_FAILED) {
-        cerr << "Error al mapear la memoria compartida para el nickname." << endl;
-        close(idMemoriaNickname);  // Cerrar descriptor de nickname
-        shm_unlink("miMemoriaNickname");  // Eliminar memoria de nickname
-        munmap(letrAAdivinar, sizeof(char));  // Desmapear letra
-        close(idMemoria);  // Cerrar descriptor de letra
-        shm_unlink(NOMBRE_MEMORIA);  // Eliminar memoria de letra
+        cerr << "Error al mapear la memoria para nickname." << endl;
+        close(idMemoriaNickname);
+        shm_unlink("miMemoriaNickname");
+        munmap(letrAAdivinar, sizeof(char));
+        close(idMemoria);
+        shm_unlink(NOMBRE_MEMORIA);
         return 1;
     }
 
     int idMemoriaRespuesta = shm_open(NOMBRE_MEMORIA_RESPUESTA, O_CREAT | O_RDWR, 0600);
     if (idMemoriaRespuesta == -1) {
-        cerr << "Error al crear la memoria compartida para la respuesta." << endl;
-        munmap(nicknameCliente, 20 * sizeof(char));  // Desmapear nickname
-        close(idMemoriaNickname);  // Cerrar descriptor de nickname
-        shm_unlink("miMemoriaNickname");  // Eliminar memoria de nickname
-        munmap(letrAAdivinar, sizeof(char));  // Desmapear letra
-        close(idMemoria);  // Cerrar descriptor de letra
-        shm_unlink(NOMBRE_MEMORIA);  // Eliminar memoria de letra
+        cerr << "Error al crear la memoria para respuesta." << endl;
+        munmap(nicknameCliente, 20 * sizeof(char));
+        close(idMemoriaNickname);
+        shm_unlink("miMemoriaNickname");
+        munmap(letrAAdivinar, sizeof(char));
+        close(idMemoria);
+        shm_unlink(NOMBRE_MEMORIA);
         return 1;
     }
 
     if (ftruncate(idMemoriaRespuesta, sizeof(respuestaCliente)) == -1) {
-        cerr << "Error al definir el tamaño de la memoria compartida para la respuesta." << endl;
-        close(idMemoriaRespuesta);  // Cerrar descriptor de respuesta
-        shm_unlink(NOMBRE_MEMORIA_RESPUESTA);  // Eliminar memoria de respuesta
-        munmap(nicknameCliente, 20 * sizeof(char));  // Desmapear nickname
-        close(idMemoriaNickname);  // Cerrar descriptor de nickname
-        shm_unlink("miMemoriaNickname");  // Eliminar memoria de nickname
-        munmap(letrAAdivinar, sizeof(char));  // Desmapear letra
-        close(idMemoria);  // Cerrar descriptor de letra
-        shm_unlink(NOMBRE_MEMORIA);  // Eliminar memoria de letra
+        cerr << "Error al definir el tamaño de la memoria para respuesta." << endl;
+        close(idMemoriaRespuesta);
+        shm_unlink(NOMBRE_MEMORIA_RESPUESTA);
+        munmap(nicknameCliente, 20 * sizeof(char));
+        close(idMemoriaNickname);
+        shm_unlink("miMemoriaNickname");
+        munmap(letrAAdivinar, sizeof(char));
+        close(idMemoria);
+        shm_unlink(NOMBRE_MEMORIA);
         return 1;
     }
 
     respuestaCliente *respuesta = (respuestaCliente *)mmap(NULL, sizeof(respuestaCliente), PROT_READ | PROT_WRITE, MAP_SHARED, idMemoriaRespuesta, 0);
     if (respuesta == MAP_FAILED) {
-        cerr << "Error al mapear la memoria compartida para la respuesta." << endl;
-        close(idMemoriaRespuesta);  // Cerrar descriptor de respuesta
-        shm_unlink(NOMBRE_MEMORIA_RESPUESTA);  // Eliminar memoria de respuesta
-        munmap(nicknameCliente, 20 * sizeof(char));  // Desmapear nickname
-        close(idMemoriaNickname);  // Cerrar descriptor de nickname
-        shm_unlink("miMemoriaNickname");  // Eliminar memoria de nickname
-        munmap(letrAAdivinar, sizeof(char));  // Desmapear letra
-        close(idMemoria);  // Cerrar descriptor de letra
-        shm_unlink(NOMBRE_MEMORIA);  // Eliminar memoria de letra
+        cerr << "Error al mapear la memoria para respuesta." << endl;
+        close(idMemoriaRespuesta);
+        shm_unlink(NOMBRE_MEMORIA_RESPUESTA);
+        munmap(nicknameCliente, 20 * sizeof(char));
+        close(idMemoriaNickname);
+        shm_unlink("miMemoriaNickname");
+        munmap(letrAAdivinar, sizeof(char));
+        close(idMemoria);
+        shm_unlink(NOMBRE_MEMORIA);
         return 1;
     }
 
-    // creo semaforos
+    // Configuración de semáforos
     sem_t *semaforoServidor = sem_open(NOMBRE_SEMAFORO_SERVIDOR, O_CREAT, 0600, 0);
     if (semaforoServidor == SEM_FAILED) {
-        cerr << "Error al crear el semaforo servidor" << endl;
-        
-        // Liberar recursos en orden inverso a su creación
-        munmap(respuesta, sizeof(respuestaCliente));          // 1. Desmapear respuesta
-        munmap(nicknameCliente, 20 * sizeof(char));           // 2. Desmapear nickname
-        munmap(letrAAdivinar, sizeof(char));                  // 3. Desmapear letra
-        close(idMemoriaRespuesta);                            // 4. Cerrar descriptor de respuesta
-        shm_unlink(NOMBRE_MEMORIA_RESPUESTA);                // 5. Eliminar memoria de respuesta
-        close(idMemoriaNickname);                            // 6. Cerrar descriptor de nickname
-        shm_unlink("miMemoriaNickname");                     // 7. Eliminar memoria de nickname
-        close(idMemoria);                                    // 8. Cerrar descriptor de letra
-        shm_unlink(NOMBRE_MEMORIA);                          // 9. Eliminar memoria de letra
-        // Si el sem_open falló, no necesitamos sem_close, pero sí sem_unlink si O_CREAT estaba activo
-        sem_unlink(NOMBRE_SEMAFORO_SERVIDOR);               // 10. Eliminar semáforo (por si quedó algún remanente)
+        cerr << "Error al crear semáforo servidor" << endl;
+        munmap(respuesta, sizeof(respuestaCliente));
+        munmap(nicknameCliente, 20 * sizeof(char));
+        munmap(letrAAdivinar, sizeof(char));
+        close(idMemoriaRespuesta);
+        shm_unlink(NOMBRE_MEMORIA_RESPUESTA);
+        close(idMemoriaNickname);
+        shm_unlink("miMemoriaNickname");
+        close(idMemoria);
+        shm_unlink(NOMBRE_MEMORIA);
+        sem_unlink(NOMBRE_SEMAFORO_SERVIDOR);
         return 1;
     }
 
     sem_t *semaforoCliente = sem_open(NOMBRE_SEMAFORO_CLIENTE, O_CREAT, 0600, 0);
     if (semaforoCliente == SEM_FAILED) {
-        cerr << "Error al crear el semáforo del cliente." << endl;
-        
-        // Liberar recursos en orden inverso a su creación
-        sem_close(semaforoServidor);  // 1. Cerrar semáforo del servidor
-
-        munmap(respuesta, sizeof(respuestaCliente));          // 1. Desmapear respuesta
-        munmap(nicknameCliente, 20 * sizeof(char));           // 2. Desmapear nickname
-        munmap(letrAAdivinar, sizeof(char));                  // 3. Desmapear letra
-        close(idMemoriaRespuesta);                            // 4. Cerrar descriptor de respuesta
-        shm_unlink(NOMBRE_MEMORIA_RESPUESTA);                // 5. Eliminar memoria de respuesta
-        close(idMemoriaNickname);                            // 6. Cerrar descriptor de nickname
-        shm_unlink("miMemoriaNickname");                     // 7. Eliminar memoria de nickname
-        close(idMemoria);                                    // 8. Cerrar descriptor de letra
-        shm_unlink(NOMBRE_MEMORIA);                          // 9. Eliminar memoria de letra
-        
+        cerr << "Error al crear semáforo cliente" << endl;
+        sem_close(semaforoServidor);
+        munmap(respuesta, sizeof(respuestaCliente));
+        munmap(nicknameCliente, 20 * sizeof(char));
+        munmap(letrAAdivinar, sizeof(char));
+        close(idMemoriaRespuesta);
+        shm_unlink(NOMBRE_MEMORIA_RESPUESTA);
+        close(idMemoriaNickname);
+        shm_unlink("miMemoriaNickname");
+        close(idMemoria);
+        shm_unlink(NOMBRE_MEMORIA);
         sem_unlink(NOMBRE_SEMAFORO_SERVIDOR);
-        sem_unlink(NOMBRE_SEMAFORO_CLIENTE);                 // 10. Eliminar semáforo del cliente
+        sem_unlink(NOMBRE_SEMAFORO_CLIENTE);
         return 1;
     }
 
     sem_t *semaforoClienteUnico = sem_open(NOMBRE_SEMAFORO_CLIENTE_UNICO, O_CREAT, 0600, 1);
     if (semaforoClienteUnico == SEM_FAILED) {
-        cerr << "Error al crear el semáforo del cliente." << endl;
-        
-        // Liberar recursos en orden inverso a su creación
-        sem_close(semaforoServidor);  // 1. Cerrar semáforo del servidor
-        sem_close(semaforoCliente);   // 2. Cerrar semáforo del cliente
-
-        munmap(respuesta, sizeof(respuestaCliente));          // 1. Desmapear respuesta
-        munmap(nicknameCliente, 20 * sizeof(char));           // 2. Desmapear nickname
-        munmap(letrAAdivinar, sizeof(char));                  // 3. Desmapear letra
-        close(idMemoriaRespuesta);                            // 4. Cerrar descriptor de respuesta
-        shm_unlink(NOMBRE_MEMORIA_RESPUESTA);                // 5. Eliminar memoria de respuesta
-        close(idMemoriaNickname);                            // 6. Cerrar descriptor de nickname
-        shm_unlink("miMemoriaNickname");                     // 7. Eliminar memoria de nickname
-        close(idMemoria);                                    // 8. Cerrar descriptor de letra
-        shm_unlink(NOMBRE_MEMORIA);                          // 9. Eliminar memoria de letra
-        
+        cerr << "Error al crear semáforo cliente único" << endl;
+        sem_close(semaforoServidor);
+        sem_close(semaforoCliente);
+        munmap(respuesta, sizeof(respuestaCliente));
+        munmap(nicknameCliente, 20 * sizeof(char));
+        munmap(letrAAdivinar, sizeof(char));
+        close(idMemoriaRespuesta);
+        shm_unlink(NOMBRE_MEMORIA_RESPUESTA);
+        close(idMemoriaNickname);
+        shm_unlink("miMemoriaNickname");
+        close(idMemoria);
+        shm_unlink(NOMBRE_MEMORIA);
         sem_unlink(NOMBRE_SEMAFORO_SERVIDOR);
         sem_unlink(NOMBRE_SEMAFORO_CLIENTE);
-        sem_unlink(NOMBRE_SEMAFORO_CLIENTE_UNICO);                 // 10. Eliminar semáforo del cliente
+        sem_unlink(NOMBRE_SEMAFORO_CLIENTE_UNICO);
         return 1;
     }
 
-   
-
-    // Ranking cliente
+    // Variables para ranking
     vector<pair<pair<bool, string>, chrono::microseconds>> rankingClientes;
     string nombreClienteGanador = "";
     chrono::microseconds tiempoClienteGanador(0);
 
-    // bucle principal del servidor
-    cout << "Servidor iniciado. Esperando cliente." << endl;
-    while(!finalizar_servidor){
-   
+    cout << "Servidor iniciado. Esperando cliente..." << endl;
 
-        sem_wait(semaforoServidor); // Espero a que un cliente se conecte
+    while(!finalizar_servidor) {
+        // Esperar conexión de cliente
+        sem_wait(semaforoServidor);
+        
+        // Verificar cliente único
+        if(sem_trywait(semaforoClienteUnico) == -1) {
+            cerr << "Ya hay un cliente conectado. Rechazando conexión." << endl;
+            continue;
+        }
 
         partida_en_curso = true;
-
-        if(finalizar_servidor){
-            cout << "Servidor finalizado por señal." << endl;
-            break;
-        }
-
-        // verificar que haya solo un cliente conectado
-        if(sem_trywait(semaforoCliente) == -1){
-            cerr << "Ya hay un cliente conectado." << endl;  
-        }
-        sem_wait(semaforoClienteUnico); // Vuelvo al inicio del bucle
-
-        int indiceAleatorio = rand() % frasesDisponibles.size();
-        string fraseAdivinar = frasesDisponibles[indiceAleatorio];
-        string fraseAdivinarAUsar = fraseAdivinar;
-        int intentosUtilizados = 0;
-        bool adivinoFrase = false;
         auto inicioPartida = chrono::high_resolution_clock::now();
         
-        // remuevo espacios en blanco
-        fraseAdivinarAUsar.erase(std::remove_if(fraseAdivinarAUsar.begin(), 
-            fraseAdivinarAUsar.end(), [](unsigned char c) { return std::isspace(c); }), fraseAdivinarAUsar.end());
+        // Seleccionar frase aleatoria
+        int indiceAleatorio = rand() % frasesDisponibles.size();
+        string fraseAdivinar = frasesDisponibles[indiceAleatorio];
+        string fraseAuxiliar = fraseAdivinar;
         
-        while((intentosUtilizados < cantidadIntentos) && !adivinoFrase && !finalizar_servidor){
+        // Eliminar espacios para la comparación
+        fraseAuxiliar.erase(remove_if(fraseAuxiliar.begin(), fraseAuxiliar.end(), 
+                            [](unsigned char c) { return isspace(c); }), fraseAuxiliar.end());
+        
+        cout << "Nueva partida iniciada. Frase: " << fraseAdivinar << endl;
+        
+        int intentosRestantes = cantidadIntentos;
+        bool adivinado = false;
+
+        // Bucle principal del juego
+        while(intentosRestantes > 0 && !adivinado && !finalizar_servidor) {
+            // Permitir que el cliente envíe una letra
+            sem_post(semaforoCliente);
+            
+            // Esperar letra del cliente
             sem_wait(semaforoServidor);
-
-            char letraRecibida = *letrAAdivinar;
+            
+            // Procesar letra
+            char letra = *letrAAdivinar;
             bool letraCorrecta = false;
-
-            if(fraseAdivinarAUsar.find(letraRecibida)!= string::npos){
+            
+            // Buscar la letra en la frase
+            auto it = find(fraseAuxiliar.begin(), fraseAuxiliar.end(), letra);
+            if(it != fraseAuxiliar.end()) {
                 letraCorrecta = true;
-                cout << "El cliente adivino una letra: " << letraRecibida << endl;
-                fraseAdivinarAUsar.erase(std::remove(fraseAdivinarAUsar.begin(), fraseAdivinarAUsar.end(), letraRecibida), fraseAdivinarAUsar.end());
-
-                respuesta->letraCorrecta = letraCorrecta;
-                respuesta->intentosRestantes = cantidadIntentos - (intentosUtilizados + 1);
-
-                if(fraseAdivinarAUsar.empty()){
-                    auto finPartida = chrono::high_resolution_clock::now();
-                    auto duracionPartida = chrono::duration_cast<chrono::microseconds>(finPartida - inicioPartida);
-                    cout << "El cliente adivino la frase: " << fraseAdivinar << endl;
-                    if(duracionPartida < tiempoClienteGanador || tiempoClienteGanador == chrono::microseconds(0)){
-                        nombreClienteGanador = string(nicknameCliente);
-                        tiempoClienteGanador = duracionPartida;
-                    }
-                    adivinoFrase = true;
-                    rankingClientes.push_back(make_pair(make_pair(adivinoFrase,string(nicknameCliente)), duracionPartida));
-                }
+                fraseAuxiliar.erase(it);
                 
-                intentosUtilizados++;
-
-            }else{
-                cout << "El cliente no adivino la letra: " << letraRecibida << endl;
-                respuesta->letraCorrecta = letraCorrecta;
-                respuesta->intentosRestantes = cantidadIntentos - (intentosUtilizados + 1);
-                intentosUtilizados++;
+                if(fraseAuxiliar.empty()) {
+                    adivinado = true;
+                    auto finPartida = chrono::high_resolution_clock::now();
+                    auto duracion = chrono::duration_cast<chrono::microseconds>(finPartida - inicioPartida);
+                    
+                    rankingClientes.push_back({{true, string(nicknameCliente)}, duracion});
+                    
+                    if(duracion < tiempoClienteGanador || tiempoClienteGanador.count() == 0) {
+                        tiempoClienteGanador = duracion;
+                        nombreClienteGanador = string(nicknameCliente);
+                    }
+                }
             }
-            sem_post(semaforoCliente); // Libero el semáforo del cliente para que procese la respuesta
-            sem_post(semaforoClienteUnico); // Libero el semáforo del cliente único para que otro cliente pueda conectarse
-
-        }
-
-        partida_en_curso = false; // La partida ha terminado
-
-        if(!adivinoFrase){
-            auto finPartida = chrono::high_resolution_clock::now();
-            auto duracionPartida = chrono::duration_cast<chrono::microseconds>(finPartida - inicioPartida);
-            rankingClientes.push_back(make_pair(make_pair(adivinoFrase,string(nicknameCliente)), duracionPartida));
-        }
-
-        if(finalizar_servidor){ // termina por el sigusr2
-            cout << "Servidor finalizado por señal." << endl;
-            mostrarResultados(rankingClientes, nombreClienteGanador, tiempoClienteGanador);
-            sem_post(semaforoClienteUnico); // Libero el semáforo del cliente único
-            break;
+            
+            intentosRestantes--;
+            
+            // Preparar respuesta
+            respuesta->letraCorrecta = letraCorrecta;
+            respuesta->intentosRestantes = intentosRestantes;
+            respuesta->partidaTerminada = (adivinado || intentosRestantes == 0);
+            
+            // Enviar respuesta
+            sem_post(semaforoCliente);
+            
+            // Si la partida terminó, esperar confirmación del cliente
+            if(respuesta->partidaTerminada) {
+                sem_wait(semaforoServidor);
+                break;
+            }
         }
         
-        sem_post(semaforoCliente);
+        if(!adivinado && intentosRestantes == 0) {
+            auto finPartida = chrono::high_resolution_clock::now();
+            auto duracion = chrono::duration_cast<chrono::microseconds>(finPartida - inicioPartida);
+            rankingClientes.push_back({{false, string(nicknameCliente)}, duracion});
+        }
+        
+        partida_en_curso = false;
+        sem_post(semaforoClienteUnico); // Permitir nuevo cliente
     }
 
-    // limpiar todos los recursos de memoria y semaforos
+    // Mostrar resultados antes de salir
+    mostrarResultados(rankingClientes, nombreClienteGanador, tiempoClienteGanador);
+
+    // Liberar recursos
     sem_close(semaforoServidor);
     sem_close(semaforoCliente);
     sem_close(semaforoClienteUnico);
-    munmap(respuesta, sizeof(respuestaCliente));          // Desmapear respuesta
-    munmap(nicknameCliente, 20 * sizeof(char));           // Desmapear nickname
-    munmap(letrAAdivinar, sizeof(char));                  // Desmapear letra
-    close(idMemoriaRespuesta);                            // Cerrar descriptor de respuesta
-    shm_unlink(NOMBRE_MEMORIA_RESPUESTA);                // Eliminar memoria de respuesta
-    close(idMemoriaNickname);                            // Cerrar descriptor de nickname
-    shm_unlink("miMemoriaNickname");                     // Eliminar memoria de nickname
-    close(idMemoria);                                    // Cerrar descriptor de letra
-    shm_unlink(NOMBRE_MEMORIA);                          // Eliminar memoria de letra
+    munmap(respuesta, sizeof(respuestaCliente));
+    munmap(nicknameCliente, 20 * sizeof(char));
+    munmap(letrAAdivinar, sizeof(char));
+    close(idMemoriaRespuesta);
+    close(idMemoriaNickname);
+    close(idMemoria);
+    shm_unlink(NOMBRE_MEMORIA_RESPUESTA);
+    shm_unlink("miMemoriaNickname");
+    shm_unlink(NOMBRE_MEMORIA);
     sem_unlink(NOMBRE_SEMAFORO_SERVIDOR);
     sem_unlink(NOMBRE_SEMAFORO_CLIENTE);
-    sem_unlink(NOMBRE_SEMAFORO_CLIENTE_UNICO); // Eliminar semáforo del cliente único
-    cout << "Servidor finalizado correctamente." << endl;
+    sem_unlink(NOMBRE_SEMAFORO_CLIENTE_UNICO);
 
-   return 0; 
+    cout << "Servidor finalizado correctamente." << endl;
+    return 0;
 }

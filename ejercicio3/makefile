@@ -3,8 +3,8 @@ CXX = g++
 CXXFLAGS = --std=c++17 -Wall -Wextra
 
 # Nombres de los ejecutables
-CLIENTE = ejercicio3Cliente
-SERVIDOR = ejercicio3Servidor
+CLIENTE = cliente
+SERVIDOR = servidor
 
 # Regla principal: compila ambos programas
 all: $(CLIENTE) $(SERVIDOR)

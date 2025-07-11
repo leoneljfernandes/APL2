@@ -33,16 +33,19 @@ void mostrarAyuda() {
 
 
 int main(int argc, char *argv[]) {
+
+    // verifico si faltan parametros o no se paso ninguno
+    if(argc < 3){
+        cout << "Error: No se han pasado parámetros." << endl;
+        mostrarAyuda();
+        return 1;
+    }
+
     if (argc > 1 && (strcmp(argv[1], "-h") || strcmp(argv[1], "--help")) == 0) {
         mostrarAyuda();
         return 0;
     }
 
-    if (argc < 2) {
-        cout << "Parámetros incompletos." << endl;
-        mostrarAyuda();
-        return 1;
-    }
 
     // verificar si -i es nro
     if (strcmp(argv[1], "-i") == 0 || strcmp(argv[1], "--impresiones") == 0) {

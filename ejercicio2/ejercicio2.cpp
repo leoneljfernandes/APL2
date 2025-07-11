@@ -290,6 +290,14 @@ int main(int argc, char *argv[])
     int cantConsumidores = 0;
     int cantPaquetes = 0;
 
+    //verificar que no pase ./ejercicio2 sin parametros
+    if (argc < 2)
+    {
+        cout << "Error: No se han pasado parámetros." << endl;
+        mostrarAyuda();
+        return 1;
+    }
+
     // verificar parametro -h
     if ((argc > 1 && strcmp(argv[1], "-h") == 0) || (strcmp(argv[1], "--help") == 0))
     {
